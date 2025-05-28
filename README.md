@@ -2,6 +2,8 @@
 
 An interactive web-based visualization tool for the JTAG TAP (Test Access Port) Controller State Machine with modern UI, responsive design, real-time signal controls, waveform display, register tracking, and sample vector playback.
 
+This tool complements my Blog article on JTAG basics: https://embeddedinn.com/articles/tutorial/JTAG-basics-and-usage-in-microcontroller-debugging/
+
 ![JTAG TAP Controller Tool](https://img.shields.io/badge/Status-Complete-green) ![License](https://img.shields.io/badge/License-Educational-blue) ![Browser](https://img.shields.io/badge/Browser-Compatible-orange)
 
 ## 🎬 Live Demo
@@ -124,8 +126,7 @@ python3 -m http.server 8000
 ├── index.html           # Complete application (HTML + CSS + JavaScript)
 ├── jtag-diagram.svg     # Official JTAG state diagram from Wikimedia
 ├── README.md           # This comprehensive documentation
-├── spec.md             # Original specification document
-└── test.html           # Register testing utilities
+└── spec.md             # Original specification document 
 ```
 
 ## 🔄 JTAG State Machine Implementation

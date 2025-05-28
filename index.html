@@ -1,0 +1,1835 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JTAG TAP Controller Visualization Tool</title>
+    <style>
+        :root {
+            --primary-color: #3b82f6;
+            --primary-dark: #1d4ed8;
+            --secondary-color: #64748b;
+            --accent-color: #06d6a0;
+            --warning-color: #f59e0b;
+            --error-color: #ef4444;
+            --background-color: #f1f5f9;
+            --surface-color: #ffffff;
+            --surface-secondary: #f8fafc;
+            --text-primary: #0f172a;
+            --text-secondary: #475569;
+            --text-muted: #94a3b8;
+            --border-light: #e2e8f0;
+            --border-medium: #cbd5e1;
+            --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            --radius-sm: 6px;
+            --radius-md: 8px;
+            --radius-lg: 12px;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+            background: linear-gradient(135deg, var(--background-color) 0%, #e2e8f0 100%);
+            color: var(--text-primary);
+            line-height: 1.6;
+            font-size: 14px;
+        }
+
+        .container {
+            max-width: 1300px;
+            margin: 0 auto;
+            padding: 10px;
+            display: grid;
+            grid-template-columns: 1fr 300px;
+            gap: 14px;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .main-content {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            padding: 8px;
+            height: 100%;
+            overflow-y: auto;
+            scrollbar-width: thin;
+            scrollbar-color: var(--border-medium) transparent;
+        }
+
+        .sidebar::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .sidebar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .sidebar::-webkit-scrollbar-thumb {
+            background: var(--border-medium);
+            border-radius: 3px;
+        }
+
+        .panel {
+            background: var(--surface-color);
+            border-radius: var(--radius-md);
+            padding: 14px;
+            box-shadow: var(--shadow-md);
+            border: 1px solid var(--border-light);
+            transition: all 0.2s ease;
+        }
+
+        .panel:hover {
+            box-shadow: var(--shadow-md);
+        }
+
+        .panel-title {
+            font-size: 0.95rem;
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .panel-title::before {
+            content: '';
+            width: 3px;
+            height: 16px;
+            background: var(--primary-color);
+            border-radius: 1px;
+        }
+
+        .diagram-panel {
+            flex: 1;
+            min-height: 0;
+            overflow: hidden;
+        }
+
+        .waveform-panel {
+            flex: 0 0 150px;
+            height: 150px;
+            overflow: hidden;
+        }
+
+        /* SVG State Diagram */
+        .state-diagram-container {
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100%;
+            min-height: 0;
+            position: relative;
+            overflow: hidden;
+            padding: 20px;
+            background: radial-gradient(circle at center, var(--surface-secondary) 0%, var(--surface-color) 100%);
+            border-radius: var(--radius-md);
+            border: 1px solid var(--border-light);
+        }
+
+        #state-diagram {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }
+
+        #state-diagram svg {
+            max-width: calc(80% - 30px);
+            max-height: calc(80% - 30px);
+            width: auto;
+            height: auto;
+            display: block;
+            object-fit: contain;
+        }
+
+        /* Signal Controls - Modern Subtle Animations */
+        .signal-controls {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 5px;
+        }
+
+        .signal-control {
+            background: var(--surface-color);
+            border: 1px solid var(--border-light);
+            border-radius: var(--radius-sm);
+            padding: 6px 4px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+            transform: translateZ(0);
+            /* Enable hardware acceleration */
+        }
+
+        /* Modern gradient border animation */
+        .signal-control::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--primary-color), transparent);
+            transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            opacity: 0;
+        }
+
+        /* Subtle glow effect */
+        .signal-control::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle at 50% 50%, rgba(59, 130, 246, 0.1) 0%, transparent 70%);
+            opacity: 0;
+            transition: opacity 0.2s ease;
+            pointer-events: none;
+        }
+
+        .signal-control:hover {
+            border-color: var(--primary-color);
+            background: linear-gradient(135deg, var(--surface-color) 0%, var(--surface-secondary) 100%);
+            transform: translateY(-1px) scale(1.02);
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
+        }
+
+        .signal-control:hover::before {
+            left: 100%;
+            opacity: 1;
+        }
+
+        .signal-control:hover::after {
+            opacity: 1;
+        }
+
+        .signal-control:active {
+            transform: translateY(0) scale(0.98);
+            transition: transform 0.1s ease;
+        }
+
+        .signal-control.active {
+            background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);
+            border-color: var(--primary-dark);
+            color: white;
+            box-shadow: 0 4px 16px rgba(59, 130, 246, 0.3), inset 0 1px 2px rgba(255, 255, 255, 0.2);
+            transform: translateY(-1px);
+        }
+
+        .signal-control.active::before {
+            display: none;
+        }
+
+        .signal-control.active::after {
+            background: radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.1) 0%, transparent 70%);
+            opacity: 1;
+        }
+
+        .signal-control.readonly {
+            cursor: default;
+            background: var(--surface-secondary);
+            color: var(--text-secondary);
+            opacity: 0.8;
+        }
+
+        .signal-control.readonly:hover {
+            transform: none;
+            box-shadow: none;
+            border-color: var(--border-light);
+            background: var(--surface-secondary);
+        }
+
+        .signal-control.readonly::before,
+        .signal-control.readonly::after {
+            display: none;
+        }
+
+        .signal-label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            margin-bottom: 4px;
+            letter-spacing: 0.03em;
+            text-transform: uppercase;
+        }
+
+        .signal-value {
+            font-size: 1.125rem;
+            font-weight: 700;
+            font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+            margin-bottom: 3px;
+            padding: 2px 4px;
+            border-radius: var(--radius-sm);
+            background: rgba(0, 0, 0, 0.05);
+            display: inline-block;
+            min-width: 24px;
+        }
+
+        .signal-control.active .signal-value {
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        .signal-value.high {
+            color: var(--primary-dark);
+        }
+
+        .signal-control.active .signal-value.high {
+            color: white;
+        }
+
+        .signal-value.low {
+            color: var(--text-secondary);
+        }
+
+        .keyboard-hint {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        .signal-control.active .keyboard-hint {
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        /* Register Display - Ultra Compact Layout */
+        .register {
+            background: var(--surface-secondary);
+            border-radius: var(--radius-sm);
+            padding: 8px;
+            border: 1px solid var(--border-light);
+            transition: all 0.15s ease;
+        }
+
+        .register:hover {
+            background: var(--surface-color);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .register-label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin-bottom: 4px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .register-label::before {
+            content: '';
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--accent-color);
+        }
+
+        .register-value {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+
+        .hex-value {
+            color: var(--primary-color);
+            font-weight: 600;
+            font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+            font-size: 0.85rem;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            display: inline-block;
+            padding: 2px 4px;
+            border-radius: var(--radius-sm);
+        }
+
+        .binary-value {
+            color: var(--text-secondary);
+            font-size: 0.65rem;
+            font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+            letter-spacing: 0.3px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            display: inline-block;
+            padding: 2px 4px;
+            border-radius: var(--radius-sm);
+        }
+
+        @keyframes valueChange {
+            0% {
+                background-color: transparent;
+                transform: translateY(0);
+                box-shadow: none;
+            }
+            20% {
+                background-color: rgba(59, 130, 246, 0.1);
+                transform: translateY(-1px);
+                box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.2);
+            }
+            40% {
+                background-color: rgba(59, 130, 246, 0.15);
+                transform: translateY(-2px);
+                box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+            }
+            60% {
+                background-color: rgba(59, 130, 246, 0.1);
+                transform: translateY(-1px);
+                box-shadow: 0 2px 6px rgba(59, 130, 246, 0.2);
+            }
+            100% {
+                background-color: transparent;
+                transform: translateY(0);
+                box-shadow: none;
+            }
+        }
+
+        .value-changed {
+            animation: valueChange 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        /* Add a subtle pulse effect to the register label when value changes */
+        @keyframes labelPulse {
+            0% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.7;
+            }
+            100% {
+                opacity: 1;
+            }
+        }
+
+        .register-label.changed::before {
+            animation: labelPulse 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        /* Waveform Display - Enhanced Design */
+        .waveform-container {
+            height: 130px;
+            position: relative;
+            border: 2px solid var(--border-medium);
+            border-radius: var(--radius-md);
+            overflow: hidden;
+            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .waveform-canvas {
+            width: 100%;
+            height: 100%;
+            background: transparent;
+            cursor: crosshair;
+        }
+
+        /* Sample Vectors - Compact Controls */
+        .vector-controls {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .vector-buttons {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+        }
+
+        .btn {
+            padding: 8px 12px;
+            border: none;
+            border-radius: var(--radius-md);
+            font-weight: 600;
+            font-size: 0.875rem;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+            text-align: center;
+            white-space: nowrap;
+            min-width: 0;
+        }
+
+        .btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            transition: left 0.5s ease;
+        }
+
+        .btn:hover::before {
+            left: 100%;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
+            color: white;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .btn-primary:hover {
+            background: linear-gradient(135deg, var(--primary-dark), #1e40af);
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-md);
+        }
+
+        .btn-secondary {
+            background: linear-gradient(135deg, var(--secondary-color), #475569);
+            color: white;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .btn-secondary:hover {
+            background: linear-gradient(135deg, #475569, #334155);
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-md);
+        }
+
+        .vector-input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid var(--border-light);
+            border-radius: var(--radius-sm);
+            font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+            font-size: 0.75rem;
+            resize: vertical;
+            min-height: 80px;
+            max-height: 120px;
+            background: var(--surface-secondary);
+            color: var(--text-primary);
+            transition: all 0.15s ease;
+            line-height: 1.4;
+        }
+
+        .vector-input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+            background: var(--surface-color);
+        }
+
+        .playback-status {
+            padding: 8px 12px;
+            background: linear-gradient(135deg, #fef3c7 0%, #fed7aa 100%);
+            border: 2px solid var(--warning-color);
+            border-radius: var(--radius-sm);
+            font-size: 0.8rem;
+            color: #92400e;
+            text-align: center;
+            font-weight: 600;
+            display: none;
+            box-shadow: var(--shadow-sm);
+            margin-bottom: 8px;
+        }
+
+        /* Speed Control Container */
+        .speed-control-container {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            background: var(--surface-secondary);
+            border-radius: var(--radius-md);
+            border: 1px solid var(--border-light);
+            margin-bottom: 8px;
+        }
+
+        .speed-control-container label {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            white-space: nowrap;
+        }
+
+        .speed-control-container .speed-labels {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            font-weight: 500;
+            margin-top: 4px;
+        }
+
+        .speed-control-container .speed-display {
+            font-size: 0.875rem;
+            font-weight: 700;
+            color: var(--primary-color);
+            min-width: 50px;
+            text-align: center;
+        }
+
+        .speed-control-container .slider-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        /* Responsive Design - Enhanced Breakpoints */
+        @media (max-width: 1200px) {
+            .container {
+                grid-template-columns: 1fr 320px;
+                gap: 16px;
+            }
+        }
+
+        @media (max-width: 1024px) {
+            .container {
+                grid-template-columns: 1fr;
+                grid-template-rows: auto 1fr;
+                height: 100vh;
+                padding: 12px;
+            }
+
+            .sidebar {
+                order: 1;
+                height: auto;
+                max-height: 40vh;
+                overflow-y: auto;
+            }
+
+            .main-content {
+                order: 2;
+                flex: 1;
+                min-height: 0;
+            }
+
+            .signal-controls {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .vector-buttons {
+                grid-template-columns: 1fr;
+            }
+
+            .ai-logo {
+                display: none; /* Hide on smaller screens */
+            }
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 8px;
+                gap: 12px;
+            }
+
+            .panel {
+                padding: 16px;
+            }
+
+            .panel-title {
+                font-size: 1rem;
+            }
+
+            .signal-controls {
+                grid-template-columns: 1fr;
+                gap: 8px;
+            }
+
+            .signal-control {
+                padding: 12px;
+            }
+
+            .waveform-container {
+                height: 120px;
+            }
+
+            .waveform-panel {
+                flex: 0 0 140px;
+                height: 140px;
+            }
+
+            .register-display {
+                gap: 12px;
+            }
+
+            .register {
+                padding: 12px;
+            }
+        }
+
+        /* State highlighting in SVG - Subtle */
+        .state-highlight {
+            fill: #fef3c7 !important;
+            stroke: var(--primary-color) !important;
+            stroke-width: 2 !important;
+            filter: none;
+        }
+
+        .state-text-highlight {
+            fill: var(--primary-dark) !important;
+            font-weight: bold !important;
+            font-size: 1em !important;
+        }
+
+        /* Tooltips - Enhanced Design */
+        .tooltip {
+            position: absolute;
+            background: linear-gradient(135deg, #1f2937 0%, #111827 100%);
+            color: white;
+            padding: 8px 12px;
+            border-radius: var(--radius-sm);
+            font-size: 0.8rem;
+            white-space: nowrap;
+            z-index: 1000;
+            pointer-events: none;
+            opacity: 0;
+            transition: all 0.2s ease;
+            box-shadow: var(--shadow-lg);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .tooltip.show {
+            opacity: 1;
+            transform: translateY(-2px);
+        }
+
+        .playback-status {
+            padding: 8px 12px;
+            background: linear-gradient(135deg, #fef3c7 0%, #fed7aa 100%);
+            border: 2px solid var(--warning-color);
+            border-radius: var(--radius-sm);
+            font-size: 0.8rem;
+            color: #92400e;
+            text-align: center;
+            font-weight: 600;
+            display: none;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .playback-status.active {
+            display: block;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.8;
+            }
+        }
+
+        /* Speed Control Slider - Modern Design */
+        input[type="range"] {
+            -webkit-appearance: none;
+            appearance: none;
+            height: 8px;
+            border-radius: 4px;
+            background: linear-gradient(90deg, var(--border-light) 0%, var(--border-medium) 100%);
+            outline: none;
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+
+        input[type="range"]:hover {
+            background: linear-gradient(90deg, var(--border-medium) 0%, var(--secondary-color) 100%);
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
+            cursor: pointer;
+            border: 3px solid white;
+            box-shadow: var(--shadow-md);
+            transition: all 0.2s ease;
+        }
+
+        input[type="range"]::-webkit-slider-thumb:hover {
+            background: linear-gradient(135deg, var(--primary-dark), #1e40af);
+            transform: scale(1.1);
+            box-shadow: var(--shadow-lg);
+        }
+
+        input[type="range"]::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
+            cursor: pointer;
+            border: 3px solid white;
+            box-shadow: var(--shadow-md);
+            transition: all 0.2s ease;
+        }
+
+        input[type="range"]::-moz-range-thumb:hover {
+            background: linear-gradient(135deg, var(--primary-dark), #1e40af);
+            transform: scale(1.1);
+            box-shadow: var(--shadow-lg);
+        }
+
+        /* AI Assistant Logo - Enhanced Design */
+        .ai-logo {
+            position: fixed;
+            bottom: 16px;
+            right: 16px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 10px;
+            background: rgba(102, 126, 234, 0.1);
+            border-radius: 16px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            font-size: 0.75rem;
+            color: #64748b;
+            font-weight: 500;
+            z-index: 1000;
+            opacity: 0.6;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            cursor: pointer;
+            border: 1px solid rgba(102, 126, 234, 0.2);
+            pointer-events: none;
+            backdrop-filter: blur(4px);
+        }
+
+        .ai-logo:hover {
+            opacity: 0.8;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(102, 126, 234, 0.15);
+            border-color: rgba(102, 126, 234, 0.3);
+        }
+
+        .ai-logo::before {
+            content: "🤖";
+            font-size: 14px;
+            filter: grayscale(0.5);
+            opacity: 0.8;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="main-content">
+            <!-- State Diagram -->
+            <div class="panel diagram-panel">
+                <h2 class="panel-title">JTAG TAP Controller State Diagram</h2>
+                <div class="state-diagram-container">
+                    <div id="state-diagram"></div>
+                </div>
+            </div>
+
+            <!-- Waveform Display -->
+            <div class="panel waveform-panel">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                    <h2 class="panel-title" style="margin-bottom: 0;">Signal Waveforms</h2>
+                    <button class="btn btn-secondary" id="clear-waveform" title="Clear waveform history (Press X)"
+                        style="padding: 6px 12px; font-size: 0.75rem;">Clear (X)</button>
+                </div>
+                <div class="waveform-container">
+                    <canvas id="waveform-canvas" class="waveform-canvas"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="sidebar">
+            <!-- Signal Controls -->
+            <div class="panel">
+                <h2 class="panel-title">Signal Controls</h2>
+                <div class="signal-controls">
+                    <div class="signal-control" id="tms-control" title="Test Mode Select - Controls state transitions">
+                        <div class="signal-label">TMS</div>
+                        <div class="signal-value low" id="tms-value">0</div>
+                        <div class="keyboard-hint">Press 'T'</div>
+                    </div>
+                    <div class="signal-control" id="tck-control"
+                        title="Test Clock - Rising edge triggers state transitions">
+                        <div class="signal-label">TCK</div>
+                        <div class="signal-value low" id="tck-value">0</div>
+                        <div class="keyboard-hint">Press 'C'</div>
+                    </div>
+                    <div class="signal-control" id="tdi-control" title="Test Data In - Data input to registers">
+                        <div class="signal-label">TDI</div>
+                        <div class="signal-value low" id="tdi-value">0</div>
+                        <div class="keyboard-hint">Press 'D'</div>
+                    </div>
+                    <div class="signal-control readonly" title="Test Data Out - Data output from registers">
+                        <div class="signal-label">TDO</div>
+                        <div class="signal-value low" id="tdo-value">0</div>
+                        <div class="keyboard-hint">Output only</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Register Status -->
+            <div class="panel">
+                <h2 class="panel-title">Register Status</h2>
+                <div class="register-display">
+                    <div class="register">
+                        <div class="register-label" id="dr-label">Data Register (DR) - 8 bits</div>
+                        <div class="register-value">
+                            <span class="hex-value" id="dr-hex">0x00</span>
+                            <span class="binary-value" id="dr-binary">00000000</span>
+                        </div>
+                    </div>
+                    <div class="register">
+                        <div class="register-label" id="ir-label">Instruction Register (IR) - 5 bits</div>
+                        <div class="register-value">
+                            <span class="hex-value" id="ir-hex">0x0</span>
+                            <span class="binary-value" id="ir-binary">00000</span>
+                        </div>
+                    </div>
+                    <div class="register">
+                        <div class="register-label" id="tdo-label">TDO Capture Register - 32 bits</div>
+                        <div class="register-value">
+                            <span class="hex-value" id="tdo-hex">0x00000000</span>
+                            <span class="binary-value" id="tdo-binary" style="font-size: 0.7rem; word-break: break-all;">00000000000000000000000000000000</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sample Vectors -->
+            <div class="panel">
+                <h2 class="panel-title">Sample Vectors</h2>
+                <div class="vector-controls">
+                    <div class="playback-status" id="playback-status">Playing vector...</div>
+
+                    <!-- Speed Control -->
+                    <div class="speed-control-container">
+                        <label for="speed-control">Speed:</label>
+                        <div class="slider-container">
+                            <input type="range" id="speed-control" min="0" max="4" value="2" step="1" />
+                            <div class="speed-labels">
+                                <span>Slow</span>
+                                <span>Fast</span>
+                            </div>
+                        </div>
+                        <span id="speed-display" class="speed-display">1x</span>
+                    </div>
+
+                    <div class="vector-buttons">
+                        <button class="btn btn-primary" id="reset-vector">Reset Sequence</button>
+                        <button class="btn btn-primary" id="dr-shift-vector">DR Shift (0xA5)</button>
+                        <button class="btn btn-primary" id="ir-load-vector">IR Load (0x1F)</button>
+                        <button class="btn btn-secondary" id="stop-playback">Stop</button>
+                    </div>
+
+                    <textarea class="vector-input" id="custom-vector" placeholder="Auto-logs TMS,TDI on TCK rising edge. Manual entry format:&#10;TMS,TDI per line&#10;Example:&#10;1,0&#10;0,1&#10;1,0"></textarea>
+
+                    <div class="vector-buttons">
+                        <button class="btn btn-primary" id="play-custom">Play Vector</button>
+                        <button class="btn btn-secondary" id="clear-custom" title="Clear the logged vector data">Clear Log</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tooltip element -->
+    <div id="tooltip" class="tooltip"></div>
+
+    <script>
+        class JTAGTAPController {
+            constructor() {
+                // JTAG Signals
+                this.signals = {
+                    TMS: 0,
+                    TCK: 0,
+                    TDI: 0,
+                    TDO: 0
+                };
+
+                // State machine states
+                this.states = [
+                    'Test-Logic-Reset',
+                    'Run-Test/Idle',
+                    'Select-DR-Scan',
+                    'Capture-DR',
+                    'Shift-DR',
+                    'Exit1-DR',
+                    'Pause-DR',
+                    'Exit2-DR',
+                    'Update-DR',
+                    'Select-IR-Scan',
+                    'Capture-IR',
+                    'Shift-IR',
+                    'Exit1-IR',
+                    'Pause-IR',
+                    'Exit2-IR',
+                    'Update-IR'
+                ];
+
+                this.currentState = 'Test-Logic-Reset';
+                this.currentStateIndex = 0;
+
+                // Registers
+                this.dataRegister = 0;      // 8-bit DR
+                this.instructionRegister = 0; // 5-bit IR (changed from 4-bit)
+                this.tdoCapture = 0;        // 32-bit TDO capture register
+                this.drLength = 8;
+                this.irLength = 5;          // Changed from 4 to 5
+                this.tdoCaptureLength = 32;
+
+                // State transition table [currentState][TMS] = nextState
+                this.stateTransitions = {
+                    'Test-Logic-Reset': { 0: 'Run-Test/Idle', 1: 'Test-Logic-Reset' },
+                    'Run-Test/Idle': { 0: 'Run-Test/Idle', 1: 'Select-DR-Scan' },
+                    'Select-DR-Scan': { 0: 'Capture-DR', 1: 'Select-IR-Scan' },
+                    'Capture-DR': { 0: 'Shift-DR', 1: 'Exit1-DR' },
+                    'Shift-DR': { 0: 'Shift-DR', 1: 'Exit1-DR' },
+                    'Exit1-DR': { 0: 'Pause-DR', 1: 'Update-DR' },
+                    'Pause-DR': { 0: 'Pause-DR', 1: 'Exit2-DR' },
+                    'Exit2-DR': { 0: 'Shift-DR', 1: 'Update-DR' },
+                    'Update-DR': { 0: 'Run-Test/Idle', 1: 'Select-DR-Scan' },
+                    'Select-IR-Scan': { 0: 'Capture-IR', 1: 'Test-Logic-Reset' },
+                    'Capture-IR': { 0: 'Shift-IR', 1: 'Exit1-IR' },
+                    'Shift-IR': { 0: 'Shift-IR', 1: 'Exit1-IR' },
+                    'Exit1-IR': { 0: 'Pause-IR', 1: 'Update-IR' },
+                    'Pause-IR': { 0: 'Pause-IR', 1: 'Exit2-IR' },
+                    'Exit2-IR': { 0: 'Shift-IR', 1: 'Update-IR' },
+                    'Update-IR': { 0: 'Run-Test/Idle', 1: 'Select-DR-Scan' }
+                };
+
+                // Waveform tracking
+                this.waveformHistory = [];
+                this.maxWaveformPoints = 100;
+                this.timeCounter = 0;
+
+                // Waveform display controls
+                this.waveformZoom = 1.0;
+                this.waveformOffset = 0;
+                this.mousePosition = { x: 0, y: 0 };
+                this.isDragging = false;
+                this.dragStart = { x: 0, offset: 0 };
+                this.cursorTime = -1;
+
+                // Playback control
+                this.isPlaying = false;
+                this.playbackInterval = null;
+                this.playbackSpeed = 500; // Default speed in milliseconds
+
+                this.init();
+                this.checkAILogoOverlap();
+                window.addEventListener('resize', () => this.checkAILogoOverlap());
+            }
+
+            init() {
+                this.loadSVG();
+                this.setupEventListeners();
+                this.setupWaveform();
+                this.updateDisplay();
+            }
+
+            async loadSVG() {
+                try {
+                    const response = await fetch('jtag-diagram.svg');
+                    const svgText = await response.text();
+                    document.getElementById('state-diagram').innerHTML = svgText;
+
+                    // Ensure proper SVG scaling after loading
+                    setTimeout(() => {
+                        const svg = document.querySelector('#state-diagram svg');
+                        if (svg) {
+                            // Remove any fixed width/height attributes and ensure responsive behavior
+                            svg.removeAttribute('width');
+                            svg.removeAttribute('height');
+                            svg.style.maxWidth = '100%';
+                            svg.style.maxHeight = '100%';
+                            svg.style.width = 'auto';
+                            svg.style.height = 'auto';
+                        }
+                        this.highlightCurrentState();
+                    }, 100);
+                } catch (error) {
+                    console.error('Failed to load SVG:', error);
+                    document.getElementById('state-diagram').innerHTML =
+                        '<div style="text-align: center; color: #ef4444;">Failed to load state diagram</div>';
+                }
+            }
+
+            setupEventListeners() {
+                // Signal control clicks
+                document.getElementById('tms-control').addEventListener('click', () => this.toggleSignal('TMS'));
+                document.getElementById('tck-control').addEventListener('click', () => this.toggleSignal('TCK'));
+                document.getElementById('tdi-control').addEventListener('click', () => this.toggleSignal('TDI'));
+
+                // Keyboard shortcuts
+                document.addEventListener('keydown', (e) => {
+                    // Speed control with arrow keys (always available)
+                    if (e.key === 'ArrowLeft') {
+                        e.preventDefault();
+                        this.adjustSpeed(-1); // Decrease speed (slower)
+                        return;
+                    }
+                    if (e.key === 'ArrowRight') {
+                        e.preventDefault();
+                        this.adjustSpeed(1); // Increase speed (faster)
+                        return;
+                    }
+
+                    // Other shortcuts only work when not playing
+                    if (this.isPlaying) return;
+
+                    switch (e.key.toLowerCase()) {
+                        case 't':
+                            e.preventDefault();
+                            this.toggleSignal('TMS');
+                            break;
+                        case 'c':
+                            e.preventDefault();
+                            this.toggleSignal('TCK');
+                            break;
+                        case 'd':
+                            e.preventDefault();
+                            this.toggleSignal('TDI');
+                            break;
+                        case 'x':
+                            e.preventDefault();
+                            this.clearWaveform();
+                            break;
+                    }
+                });
+
+                // Sample vector buttons
+                document.getElementById('reset-vector').addEventListener('click', () => this.playResetVector());
+                document.getElementById('dr-shift-vector').addEventListener('click', () => this.playDRShiftVector());
+                document.getElementById('ir-load-vector').addEventListener('click', () => this.playIRLoadVector());
+                document.getElementById('stop-playback').addEventListener('click', () => this.stopPlayback());
+                document.getElementById('play-custom').addEventListener('click', () => this.playCustomVector());
+                document.getElementById('clear-custom').addEventListener('click', () => this.clearCustomVector());
+                document.getElementById('clear-waveform').addEventListener('click', () => this.clearWaveform());
+
+                // Speed control
+                document.getElementById('speed-control').addEventListener('input', (e) => {
+                    const speedIndex = parseInt(e.target.value);
+                    const speedSettings = [
+                        { speed: 2000, label: '0.25x' },  // 0 - Slowest
+                        { speed: 1000, label: '0.5x' },   // 1
+                        { speed: 500, label: '1x' },      // 2 - Default
+                        { speed: 250, label: '2x' },      // 3
+                        { speed: 125, label: '4x' }       // 4 - Fastest
+                    ];
+
+                    this.playbackSpeed = speedSettings[speedIndex].speed;
+                    document.getElementById('speed-display').textContent = speedSettings[speedIndex].label;
+                });
+            }
+
+            setupWaveform() {
+                this.waveformCanvas = document.getElementById('waveform-canvas');
+                this.waveformCtx = this.waveformCanvas.getContext('2d');
+
+                // Set canvas size
+                const container = this.waveformCanvas.parentElement;
+                this.waveformCanvas.width = container.clientWidth;
+                this.waveformCanvas.height = container.clientHeight;
+
+                // Handle resize
+                window.addEventListener('resize', () => {
+                    this.waveformCanvas.width = container.clientWidth;
+                    this.waveformCanvas.height = container.clientHeight;
+                    this.drawWaveform();
+                });
+
+                // Mouse event listeners for interactivity
+                this.waveformCanvas.addEventListener('mousemove', (e) => this.handleMouseMove(e));
+                this.waveformCanvas.addEventListener('mousedown', (e) => this.handleMouseDown(e));
+                this.waveformCanvas.addEventListener('mouseup', (e) => this.handleMouseUp(e));
+                this.waveformCanvas.addEventListener('wheel', (e) => this.handleWheel(e));
+                this.waveformCanvas.addEventListener('mouseleave', () => this.handleMouseLeave());
+
+                // Draw initial empty waveform
+                this.drawWaveform();
+            }
+
+            toggleSignal(signal) {
+                if (this.isPlaying) return;
+
+                const oldValue = this.signals[signal];
+                this.signals[signal] = this.signals[signal] === 0 ? 1 : 0;
+
+                // Handle TCK rising edge for state transitions and logging
+                if (signal === 'TCK' && oldValue === 0 && this.signals[signal] === 1) {
+                    this.performStateTransition();
+                    this.logToCustomVector();
+                }
+
+                this.recordWaveformPoint();
+                this.updateDisplay();
+            }
+
+            adjustSpeed(direction) {
+                const speedSlider = document.getElementById('speed-control');
+                const currentValue = parseInt(speedSlider.value);
+                let newValue = currentValue + direction;
+
+                // Clamp to valid range (0-4)
+                newValue = Math.max(0, Math.min(4, newValue));
+
+                if (newValue !== currentValue) {
+                    speedSlider.value = newValue;
+
+                    // Trigger the input event to update speed
+                    const event = new Event('input');
+                    speedSlider.dispatchEvent(event);
+                }
+            }
+
+            logToCustomVector() {
+                const customVectorInput = document.getElementById('custom-vector');
+                const newEntry = `${this.signals.TMS},${this.signals.TDI}`;
+
+                // Get current content
+                let currentContent = customVectorInput.value.trim();
+
+                // If there's existing content, add a newline before the new entry
+                if (currentContent) {
+                    currentContent += '\n' + newEntry;
+                } else {
+                    currentContent = newEntry;
+                }
+
+                // Update the text area
+                customVectorInput.value = currentContent;
+
+                // Auto-scroll to bottom to show the latest entry
+                customVectorInput.scrollTop = customVectorInput.scrollHeight;
+            }
+
+            clearCustomVector() {
+                const customVectorInput = document.getElementById('custom-vector');
+                customVectorInput.value = '';
+            }
+
+            // Mouse event handlers for waveform interactivity
+            handleMouseMove(e) {
+                const rect = this.waveformCanvas.getBoundingClientRect();
+                this.mousePosition.x = e.clientX - rect.left;
+                this.mousePosition.y = e.clientY - rect.top;
+
+                if (this.isDragging) {
+                    const deltaX = this.mousePosition.x - this.dragStart.x;
+                    const pixelsPerTimeUnit = (this.waveformCanvas.width - 100) / Math.max(1, this.waveformHistory.length - 1);
+                    this.waveformOffset = Math.max(0, Math.min(
+                        this.waveformHistory.length - 1,
+                        this.dragStart.offset - deltaX / pixelsPerTimeUnit
+                    ));
+                    this.drawWaveform();
+                } else {
+                    // Update cursor position for hover information
+                    this.updateCursorTime();
+                    this.drawWaveform();
+                }
+            }
+
+            handleMouseDown(e) {
+                this.isDragging = true;
+                this.dragStart.x = this.mousePosition.x;
+                this.dragStart.offset = this.waveformOffset;
+                this.waveformCanvas.style.cursor = 'grabbing';
+            }
+
+            handleMouseUp(e) {
+                this.isDragging = false;
+                this.waveformCanvas.style.cursor = 'crosshair';
+            }
+
+            handleWheel(e) {
+                e.preventDefault();
+                const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
+                this.waveformZoom = Math.max(0.1, Math.min(10, this.waveformZoom * zoomFactor));
+                this.drawWaveform();
+            }
+
+            handleMouseLeave() {
+                this.cursorTime = -1;
+                this.isDragging = false;
+                this.waveformCanvas.style.cursor = 'default';
+                this.drawWaveform();
+            }
+
+            updateCursorTime() {
+                if (this.waveformHistory.length < 2) {
+                    this.cursorTime = -1;
+                    return;
+                }
+
+                const leftMargin = 50;
+                const rightMargin = 10;
+                const plotWidth = this.waveformCanvas.width - leftMargin - rightMargin;
+
+                if (this.mousePosition.x < leftMargin || this.mousePosition.x > this.waveformCanvas.width - rightMargin) {
+                    this.cursorTime = -1;
+                    return;
+                }
+
+                const relativeX = this.mousePosition.x - leftMargin;
+                const timeIndex = Math.round((relativeX / plotWidth) * (this.waveformHistory.length - 1));
+
+                if (timeIndex >= 0 && timeIndex < this.waveformHistory.length) {
+                    this.cursorTime = timeIndex;
+                    this.waveformCanvas.style.cursor = 'crosshair';
+                } else {
+                    this.cursorTime = -1;
+                    this.waveformCanvas.style.cursor = 'default';
+                }
+            }
+
+            performStateTransition() {
+                const nextState = this.stateTransitions[this.currentState][this.signals.TMS];
+
+                if (nextState) {
+                    this.currentState = nextState;
+                    this.currentStateIndex = this.states.indexOf(nextState);
+
+                    // Handle register operations based on state
+                    this.handleRegisterOperations();
+
+                    this.highlightCurrentState();
+                }
+            }
+
+            handleRegisterOperations() {
+                // Capture TDO bit into 32-bit register on every clock cycle when in shifting states
+                if (this.currentState === 'Shift-DR' || this.currentState === 'Shift-IR' ||
+                    this.currentState === 'Exit1-DR' || this.currentState === 'Exit1-IR') {
+                    // Shift TDO into the capture register (left shift, new bit at LSB)
+                    this.tdoCapture = ((this.tdoCapture << 1) | this.signals.TDO) & 0xFFFFFFFF;
+                }
+
+                switch (this.currentState) {
+                    case 'Capture-DR':
+                        // Load parallel data into DR (for simulation, keep current value)
+                        this.signals.TDO = this.dataRegister & 1;
+                        break;
+
+                    case 'Shift-DR':
+                        // Shift DR: TDI -> LSB, register shifts left, MSB -> TDO
+                        this.signals.TDO = (this.dataRegister >> (this.drLength - 1)) & 1;
+                        this.dataRegister = ((this.dataRegister << 1) | this.signals.TDI) & 0xFF;
+                        break;
+
+                    case 'Capture-IR':
+                        // Load parallel data into IR (typically 0x01 pattern for 5-bit)
+                        this.instructionRegister = 0x1;
+                        this.signals.TDO = this.instructionRegister & 1;
+                        break;
+
+                    case 'Shift-IR':
+                        // Shift IR: TDI -> LSB, register shifts left, MSB -> TDO (5-bit mask)
+                        this.signals.TDO = (this.instructionRegister >> (this.irLength - 1)) & 1;
+                        this.instructionRegister = ((this.instructionRegister << 1) | this.signals.TDI) & 0x1F;
+                        break;
+
+                    case 'Exit1-DR':
+                        // Final shift operation when exiting Shift-DR
+                        this.signals.TDO = (this.dataRegister >> (this.drLength - 1)) & 1;
+                        this.dataRegister = ((this.dataRegister << 1) | this.signals.TDI) & 0xFF;
+                        break;
+
+                    case 'Exit1-IR':
+                        // Final shift operation when exiting Shift-IR (5-bit mask)
+                        this.signals.TDO = (this.instructionRegister >> (this.irLength - 1)) & 1;
+                        this.instructionRegister = ((this.instructionRegister << 1) | this.signals.TDI) & 0x1F;
+                        break;
+
+                    case 'Test-Logic-Reset':
+                        // Reset all registers
+                        this.dataRegister = 0;
+                        this.instructionRegister = 0;
+                        this.tdoCapture = 0;
+                        this.signals.TDO = 0;
+                        break;
+
+                    default:
+                        // In other states, TDO typically outputs 0 or maintains previous value
+                        break;
+                }
+            }
+
+            recordWaveformPoint() {
+                this.waveformHistory.push({
+                    time: this.timeCounter++,
+                    TMS: this.signals.TMS,
+                    TCK: this.signals.TCK,
+                    TDI: this.signals.TDI,
+                    TDO: this.signals.TDO
+                });
+
+                if (this.waveformHistory.length > this.maxWaveformPoints) {
+                    this.waveformHistory.shift();
+                }
+
+                this.drawWaveform();
+            }
+
+            clearWaveform() {
+                // Clear the waveform history
+                this.waveformHistory = [];
+                this.timeCounter = 0;
+
+                // Redraw the waveform (will show empty waveform)
+                this.drawWaveform();
+            }
+
+            drawWaveform() {
+                const ctx = this.waveformCtx;
+                const canvas = this.waveformCanvas;
+
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                // Fill with dark background
+                ctx.fillStyle = '#1f2937';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                const signalHeight = canvas.height / 5;
+                const signalSpacing = signalHeight * 0.9;
+                const signalOffset = signalHeight * 0.05;
+                const leftMargin = 50;
+                const rightMargin = 10;
+                const bottomMargin = 35; // Increased bottom margin for text
+                const plotHeight = canvas.height - bottomMargin;
+                const plotWidth = canvas.width - leftMargin - rightMargin;
+
+                const signals = ['TMS', 'TCK', 'TDI', 'TDO'];
+                const colors = ['#ef4444', '#10b981', '#3b82f6', '#f59e0b'];
+
+                // Draw signal labels
+                ctx.fillStyle = '#e5e7eb';
+                ctx.font = '12px sans-serif';
+                ctx.textAlign = 'left';
+
+                signals.forEach((signal, index) => {
+                    const y = signalOffset + index * signalSpacing + signalSpacing / 2;
+                    ctx.fillText(signal, 5, y);
+                });
+
+                // Draw time scale with correct markers
+                if (this.waveformHistory.length > 0) {
+                    ctx.strokeStyle = '#374151';
+                    ctx.lineWidth = 1;
+
+                    // Calculate time markers based on actual data
+                    const maxTime = this.waveformHistory.length - 1;
+                    const timeStep = Math.max(1, Math.ceil(maxTime / 10)); // Show about 10 markers
+
+                    for (let t = 0; t <= maxTime; t += timeStep) {
+                        const x = leftMargin + (t / Math.max(1, maxTime)) * plotWidth;
+
+                        ctx.beginPath();
+                        ctx.moveTo(x, 0);
+                        ctx.lineTo(x, plotHeight);
+                        ctx.stroke();
+
+                        ctx.fillStyle = '#9ca3af';
+                        ctx.font = '10px sans-serif';
+                        ctx.textAlign = 'center';
+                        ctx.fillText(t.toString(), x, canvas.height - 5);
+                    }
+                }
+
+                // Only draw waveforms if we have enough data
+                if (this.waveformHistory.length < 2) return;
+
+                // Draw waveforms
+                signals.forEach((signal, signalIndex) => {
+                    ctx.strokeStyle = colors[signalIndex];
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+
+                    const baseY = signalOffset + signalIndex * signalSpacing;
+                    const highY = baseY + signalSpacing * 0.1;
+                    const lowY = baseY + signalSpacing * 0.8;
+
+                    for (let i = 0; i < this.waveformHistory.length; i++) {
+                        const point = this.waveformHistory[i];
+                        const x = leftMargin + (i / Math.max(1, this.waveformHistory.length - 1)) * plotWidth;
+                        const y = point[signal] ? highY : lowY;
+
+                        if (i === 0) {
+                            ctx.moveTo(x, y);
+                        } else {
+                            const prevPoint = this.waveformHistory[i - 1];
+                            const prevY = prevPoint[signal] ? highY : lowY;
+
+                            if (prevY !== y) {
+                                // Draw vertical transition
+                                ctx.lineTo(x, prevY);
+                                ctx.lineTo(x, y);
+                            } else {
+                                ctx.lineTo(x, y);
+                            }
+                        }
+                    }
+
+                    ctx.stroke();
+                });
+
+                // Draw cursor line and information
+                if (this.cursorTime >= 0 && this.cursorTime < this.waveformHistory.length) {
+                    const cursorX = leftMargin + (this.cursorTime / Math.max(1, this.waveformHistory.length - 1)) * plotWidth;
+
+                    // Draw cursor line
+                    ctx.strokeStyle = '#ffffff';
+                    ctx.lineWidth = 1;
+                    ctx.setLineDash([3, 3]);
+                    ctx.beginPath();
+                    ctx.moveTo(cursorX, 0);
+                    ctx.lineTo(cursorX, plotHeight);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+
+                    // Draw cursor info box
+                    const point = this.waveformHistory[this.cursorTime];
+
+                    // Count clock cycles (TCK rising edges) up to current time
+                    let clockCount = 0;
+                    for (let i = 1; i <= this.cursorTime && i < this.waveformHistory.length; i++) {
+                        const prev = this.waveformHistory[i - 1];
+                        const curr = this.waveformHistory[i];
+                        if (prev.TCK === 0 && curr.TCK === 1) {
+                            clockCount++;
+                        }
+                    }
+
+                    // Create more compact info text
+                    const infoText = `time:${this.cursorTime} clock:${clockCount} TMS:${point.TMS} TCK:${point.TCK} TDI:${point.TDI} TDO:${point.TDO}`;
+
+                    // Set font before measuring
+                    ctx.font = '10px monospace';
+                    ctx.textAlign = 'left';
+                    const textMetrics = ctx.measureText(infoText);
+                    const textWidth = textMetrics.width;
+                    const textHeight = 10;
+                    const padding = 3;
+
+                    // Position at top left of waveform area
+                    const infoX = leftMargin;
+                    const infoY = 15;
+
+                    // Draw background with higher opacity for better visibility
+                    ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+                    ctx.fillRect(infoX - padding, infoY - textHeight - padding, textWidth + (padding * 2), textHeight + (padding * 2));
+
+                    // Draw text with higher contrast
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillText(infoText, infoX, infoY);
+                }
+            }
+
+            highlightCurrentState() {
+                // Remove previous highlighting
+                const svg = document.querySelector('#state-diagram svg');
+                if (!svg) return;
+
+                // Remove previous highlights
+                svg.querySelectorAll('.state-highlight').forEach(el => {
+                    el.classList.remove('state-highlight');
+                });
+                svg.querySelectorAll('.state-text-highlight').forEach(el => {
+                    el.classList.remove('state-text-highlight');
+                });
+
+                // Find and highlight current state
+                // The SVG uses text elements for state names, we need to find the right one
+                const textElements = svg.querySelectorAll('text');
+                textElements.forEach(textEl => {
+                    const text = textEl.textContent.trim();
+                    if (text.includes(this.currentState) ||
+                        this.currentState.includes(text) ||
+                        this.normalizeStateName(text) === this.normalizeStateName(this.currentState)) {
+
+                        textEl.classList.add('state-text-highlight');
+
+                        // Try to find associated shape
+                        const parent = textEl.parentElement;
+                        if (parent) {
+                            const shapes = parent.querySelectorAll('rect, circle, ellipse, path');
+                            shapes.forEach(shape => {
+                                shape.classList.add('state-highlight');
+                            });
+                        }
+                    }
+                });
+            }
+
+            normalizeStateName(name) {
+                return name.toLowerCase()
+                    .replace(/[^a-z0-9]/g, '')
+                    .replace(/test.*logic.*reset/i, 'testlogicreset')
+                    .replace(/run.*test.*idle/i, 'runtestidle');
+            }
+
+            updateDisplay() {
+                // Update signal displays
+                Object.keys(this.signals).forEach(signal => {
+                    const valueEl = document.getElementById(`${signal.toLowerCase()}-value`);
+                    const controlEl = document.getElementById(`${signal.toLowerCase()}-control`);
+
+                    if (valueEl) {
+                        valueEl.textContent = this.signals[signal];
+                        valueEl.className = `signal-value ${this.signals[signal] ? 'high' : 'low'}`;
+                    }
+
+                    if (controlEl && signal !== 'TDO') {
+                        controlEl.className = `signal-control ${this.signals[signal] ? 'active' : ''}`;
+                    }
+                });
+
+                // Update register displays with animation
+                const updateRegisterValue = (elementId, newValue, format, labelId) => {
+                    const element = document.getElementById(elementId);
+                    const labelElement = labelId ? document.getElementById(labelId) : null;
+                    
+                    if (element) {
+                        const oldValue = element.textContent;
+                        const newFormattedValue = format(newValue);
+                        if (oldValue !== newFormattedValue) {
+                            element.textContent = newFormattedValue;
+                            element.classList.remove('value-changed');
+                            // Force reflow
+                            void element.offsetWidth;
+                            element.classList.add('value-changed');
+
+                            // Animate the label if it exists
+                            if (labelElement) {
+                                labelElement.classList.remove('changed');
+                                void labelElement.offsetWidth;
+                                labelElement.classList.add('changed');
+                            }
+                        }
+                    }
+                };
+
+                // Update DR
+                updateRegisterValue('dr-hex', this.dataRegister, 
+                    value => `0x${value.toString(16).toUpperCase().padStart(2, '0')}`, 'dr-label');
+                updateRegisterValue('dr-binary', this.dataRegister, 
+                    value => value.toString(2).padStart(8, '0'));
+
+                // Update IR
+                updateRegisterValue('ir-hex', this.instructionRegister, 
+                    value => `0x${value.toString(16).toUpperCase()}`, 'ir-label');
+                updateRegisterValue('ir-binary', this.instructionRegister, 
+                    value => value.toString(2).padStart(5, '0'));
+
+                // Update TDO capture
+                updateRegisterValue('tdo-hex', this.tdoCapture, 
+                    value => `0x${value.toString(16).toUpperCase().padStart(8, '0')}`, 'tdo-label');
+                updateRegisterValue('tdo-binary', this.tdoCapture, 
+                    value => value.toString(2).padStart(32, '0'));
+            }
+
+            // Sample vector implementations
+            playResetVector() {
+                const vector = [
+                    { TMS: 1, TDI: 0 }, // Go to Test-Logic-Reset
+                    { TMS: 1, TDI: 0 }, // Stay in Test-Logic-Reset
+                    { TMS: 1, TDI: 0 }, // Stay in Test-Logic-Reset
+                    { TMS: 1, TDI: 0 }, // Stay in Test-Logic-Reset
+                    { TMS: 1, TDI: 0 }, // Stay in Test-Logic-Reset
+                    { TMS: 0, TDI: 0 }  // Go to Run-Test/Idle
+                ];
+                this.playVector(vector, 'Reset Sequence');
+            }
+
+            playDRShiftVector() {
+                // Sequence to shift 0xA5 into DR, starting from Run-Test/Idle
+                const vector = [
+                    // First ensure we're in Run-Test/Idle
+                    { TMS: 0, TDI: 0 }, // Stay in Run-Test/Idle
+                    // Go to Shift-DR
+                    { TMS: 1, TDI: 0 }, // Select-DR-Scan
+                    { TMS: 0, TDI: 0 }, // Capture-DR
+                    // Shift 0xA5 (10100101) LSB first into the register
+                    { TMS: 0, TDI: 1 }, // Shift-DR, shift in bit 0 of 0xA5 (1)
+                    { TMS: 0, TDI: 0 }, // Shift-DR, shift in bit 1 of 0xA5 (0)
+                    { TMS: 0, TDI: 1 }, // Shift-DR, shift in bit 2 of 0xA5 (1)
+                    { TMS: 0, TDI: 0 }, // Shift-DR, shift in bit 3 of 0xA5 (0)
+                    { TMS: 0, TDI: 0 }, // Shift-DR, shift in bit 4 of 0xA5 (0)
+                    { TMS: 0, TDI: 1 }, // Shift-DR, shift in bit 5 of 0xA5 (1)
+                    { TMS: 0, TDI: 0 }, // Shift-DR, shift in bit 6 of 0xA5 (0)
+                    { TMS: 1, TDI: 1 }, // Exit1-DR, shift in bit 7 of 0xA5 (1)
+                    { TMS: 1, TDI: 0 }, // Update-DR
+                    { TMS: 0, TDI: 0 }  // Run-Test/Idle
+                ];
+                this.playVector(vector, 'DR Shift (0xA5)');
+            }
+
+            playIRLoadVector() {
+                // Sequence to load 0x1F into 5-bit IR, starting from Run-Test/Idle
+                const vector = [
+                    // First ensure we're in Run-Test/Idle
+                    { TMS: 0, TDI: 0 }, // Stay in Run-Test/Idle
+                    // Go to Shift-IR
+                    { TMS: 1, TDI: 0 }, // Select-DR-Scan
+                    { TMS: 1, TDI: 0 }, // Select-IR-Scan
+                    { TMS: 0, TDI: 0 }, // Capture-IR
+                    // Shift 0x1F (11111) LSB first into the 5-bit register
+                    { TMS: 0, TDI: 1 }, // Shift-IR, shift in bit 0 of 0x1F (1)
+                    { TMS: 0, TDI: 1 }, // Shift-IR, shift in bit 1 of 0x1F (1)
+                    { TMS: 0, TDI: 1 }, // Shift-IR, shift in bit 2 of 0x1F (1)
+                    { TMS: 0, TDI: 1 }, // Shift-IR, shift in bit 3 of 0x1F (1)
+                    { TMS: 1, TDI: 1 }, // Exit1-IR, shift in bit 4 of 0x1F (1)
+                    { TMS: 1, TDI: 0 }, // Update-IR
+                    { TMS: 0, TDI: 0 }  // Run-Test/Idle
+                ];
+                this.playVector(vector, 'IR Load (0x1F)');
+            }
+
+            playCustomVector() {
+                const input = document.getElementById('custom-vector').value.trim();
+                if (!input) return;
+
+                const vector = [];
+                const lines = input.split('\n');
+
+                for (const line of lines) {
+                    const trimmed = line.trim();
+                    if (!trimmed || trimmed.startsWith('#')) continue;
+
+                    const parts = trimmed.split(',');
+                    if (parts.length >= 2) {
+                        vector.push({
+                            TMS: parseInt(parts[0].trim()) || 0,
+                            TDI: parseInt(parts[1].trim()) || 0
+                        });
+                    }
+                }
+
+                if (vector.length > 0) {
+                    this.playVector(vector, 'Custom Vector');
+                }
+            }
+
+            playVector(vector, name) {
+                if (this.isPlaying) {
+                    this.stopPlayback();
+                }
+
+                this.isPlaying = true;
+                let step = 0;
+
+                const statusEl = document.getElementById('playback-status');
+                statusEl.textContent = `Playing: ${name}`;
+                statusEl.classList.add('active');
+
+                this.playbackInterval = setInterval(() => {
+                    if (step >= vector.length) {
+                        this.stopPlayback();
+                        return;
+                    }
+
+                    const currentStep = vector[step];
+
+                    // Set TMS and TDI
+                    this.signals.TMS = currentStep.TMS;
+                    this.signals.TDI = currentStep.TDI;
+
+                    // Generate TCK rising edge
+                    this.signals.TCK = 0;
+                    this.recordWaveformPoint();
+                    this.updateDisplay();
+
+                    setTimeout(() => {
+                        this.signals.TCK = 1;
+                        this.performStateTransition();
+                        this.recordWaveformPoint();
+                        this.updateDisplay();
+
+                        // If this is the last step, return TCK to 0 after a brief delay
+                        if (step === vector.length - 1) {
+                            setTimeout(() => {
+                                this.signals.TCK = 0;
+                                this.recordWaveformPoint();
+                                this.updateDisplay();
+                            }, this.playbackSpeed * 0.2);
+                        }
+                    }, this.playbackSpeed * 0.5);
+
+                    step++;
+                }, this.playbackSpeed);
+            }
+
+            stopPlayback() {
+                if (this.playbackInterval) {
+                    clearInterval(this.playbackInterval);
+                    this.playbackInterval = null;
+                }
+
+                // Ensure TCK is returned to 0 when playback stops
+                this.signals.TCK = 0;
+                this.recordWaveformPoint();
+                this.updateDisplay();
+
+                this.isPlaying = false;
+                document.getElementById('playback-status').classList.remove('active');
+            }
+
+            checkAILogoOverlap() {
+                const aiLogo = document.querySelector('.ai-logo');
+                if (!aiLogo) return;
+
+                const logoRect = aiLogo.getBoundingClientRect();
+                const container = document.querySelector('.container');
+                const containerRect = container.getBoundingClientRect();
+
+                // Add safety margin to container rect
+                const margin = 20; // pixels of safety margin
+                const safeContainerRect = {
+                    left: containerRect.left - margin,
+                    right: containerRect.right + margin,
+                    top: containerRect.top - margin,
+                    bottom: containerRect.bottom + margin
+                };
+
+                // Check if logo overlaps with container content (including safety margin)
+                const overlaps = (
+                    logoRect.left < safeContainerRect.right &&
+                    logoRect.right > safeContainerRect.left &&
+                    logoRect.top < safeContainerRect.bottom &&
+                    logoRect.bottom > safeContainerRect.top
+                );
+
+                // Also check if we're on a small screen
+                const isSmallScreen = window.innerWidth <= 1024;
+
+                // Hide logo if it overlaps or on small screen
+                aiLogo.style.display = (overlaps || isSmallScreen) ? 'none' : 'flex';
+            }
+        }
+
+        // Initialize the application when the page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            window.jtagController = new JTAGTAPController();
+        });
+    </script>
+
+    <!-- AI Assistant Logo -->
+    <div class="ai-logo" title="Created with AI assistance" style="display: none;">
+        Built with AI
+    </div>
+</body>
+
+</html>

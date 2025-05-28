@@ -6,7 +6,7 @@ An interactive web-based visualization tool for the JTAG TAP (Test Access Port) 
 
 ## 🎬 Live Demo
 
-**Try it now**: Simply download and open `index.html` in your browser - no installation required!
+**Try it now**: https://vppillai.github.io/jtag-sim/
 
 ### What You'll See
 
@@ -18,11 +18,10 @@ An interactive web-based visualization tool for the JTAG TAP (Test Access Port) 
 
 ### First Steps
 
-1. **Open** `index.html` in any modern browser
-2. **Click** the TCK button (or press 'C') to see state transitions
-3. **Try** the "Reset Sequence" sample vector to see automated operation
-4. **Hover** over waveforms to see signal timing information
-5. **Experiment** with custom vectors in the text area
+1. **Click** the TCK button (or press 'C') to see state transitions
+2. **Try** the "Reset Sequence" sample vector to see automated operation
+3. **Hover** over waveforms to see signal timing information
+4. **Experiment** with custom vectors in the text area
 
 ## 🌟 Features
 
